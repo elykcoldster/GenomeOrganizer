@@ -39,11 +39,14 @@ tracks = (
         Track('H4K20me1',1e5,'../hg19.chrom.sizes').from_bigWig(
             '/mnt/d/data/sniper/histone_marks/bigWigs_GM12878/GM12878_H4K20me1.bigWig'
         ),
-    ))
+    )),
+    Track('Subcompartments',1e5,'../hg19.chrom.sizes').from_bed('data/GM12878_subcompartments.bed'),
 )
+
+""""""
 
 for track in tracks:
     g.add_track(track)
 
 g.save('genomes/genome_GM12878.mg')
-pprint.pprint(g.get('chr1',1e5,5e5))
+pprint.pprint(g.get('chr1',1e5,5e5,to_numpy=True,tracks=['Replication_Timing/G1','Replication_Timing/S2','Replication_Timing/G2']))

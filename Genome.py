@@ -84,6 +84,9 @@ class Sequential:
         for track in tracks:
             self.tracks[track.name] = track
 
+    def __getitem__(self,track_name):
+        return self.tracks[track_name]
+
     def get(self, chrom, start, end=None):
         data = {}
 
@@ -96,6 +99,9 @@ class Genome:
     def __init__(self, resolution: int):
         self.resolution = int(resolution)
         self.tracks = {}
+
+    def __getitem__(self, track_name):
+        return self.get_track(track_name)
 
     def add_track(self, track):
         track_name = track.name
@@ -128,12 +134,25 @@ class Genome:
     Outputs a dict where each key is the track name and values are the data
     returned by each track.
     """
-    def get(self, chrom, start, end=None):
+    def get(self, chrom, start, end=None, tracks=None, to_numpy=False):
         
         data = {}
 
-        for track_name in self.tracks:
-            data[track_name] = self.tracks[track_name].get(chrom,start,end)
+        if tracks is None:
+            tracks = [track for track in self.tracks]
+
+        for track_path in tracks:
+            track_path_array = track_path.split('/')
+
+            track = self.tracks[track_path_array[0]]
+            
+            for i in range(1,len(track_path_array)):
+                track = track[track_path_array[i]]
+
+            data[track_path] = track.get(chrom,start,end)
+
+        if to_numpy:
+            return np.array([data[track] for track in data])
 
         return data
 
@@ -143,10 +162,14 @@ class Genome:
 
     Outputs data returned by one track.
     """
-    def get_track(self, track_name, chrom, start, end):
+    def get_track(self, track_name):
 
-        return self.tracks[track_name].get(chrom,start,end)
+        return self.tracks[track_name]
 
     """Saves genome into a pickle-able file format"""
     def save(self, fname):
+        self.save_path = fname
         pickle.dump(self, open(fname,'wb'))
+
+    def write(self):
+        pickle.dump(self, open(self.save_path,'wb'))
