@@ -1,4 +1,5 @@
 import pickle
+import h5py
 import numpy as np
 import pyBigWig as pybw
 from utilities import chrom_sizes
@@ -13,14 +14,14 @@ resolution - the resolution of the genome
 
 class Track:
 
-    def __init__(self, name, resolution: int, sizes_file):
+    def __init__(self, name, resolution: int, sizes):
         self.chrom_data = {}
         self.name = name
         self.resolution = int(resolution)
-        self.sizes = chrom_sizes(sizes_file)
+        self.sizes = sizes
 
         for chrom in self.sizes:
-            self.chrom_data[chrom] = np.zeros((self.sizes[chrom] // self.resolution + 1,)).astype(object)
+            self.chrom_data[chrom] = np.zeros((self.sizes[chrom] // self.resolution + 1,))
 
     def get(self, chrom, start, end=None):
         start = int(start // self.resolution)
@@ -34,17 +35,26 @@ class Track:
 
     def from_bed(self,bed_file):
         f = open(bed_file,'r')
+        typecast = False
 
         for line in f:
             data = line.split()
             chrom = data[0]
-            start = int(data[1]) // self.resolution
-            end = int(data[2]) // self.resolution
+
+            try:
+                start = int(data[1]) // self.resolution
+                end = int(data[2]) // self.resolution
+            except ValueError:
+                continue
+
             try:
                 value = float(data[3])
             except:
                 value = data[3]
-            
+                if not typecast:
+                    for c in self.sizes:
+                        self.chrom_data[c] = self.chrom_data[c].astype(str)
+                    typecast = True
 
             self.chrom_data[chrom][start:end] = value
 
@@ -77,7 +87,7 @@ class Track:
         pass
 
 class Sequential:
-    def __init__(self,name,tracks):
+    def __init__(self,name,tracks=[]):
         self.name = name
         self.tracks = {}
 
@@ -86,6 +96,9 @@ class Sequential:
 
     def __getitem__(self,track_name):
         return self.tracks[track_name]
+
+    def add_track(self, track):
+        self.tracks[track.name] = track
 
     def get(self, chrom, start, end=None):
         data = {}
@@ -96,9 +109,10 @@ class Sequential:
         return data
 
 class Genome:
-    def __init__(self, resolution: int):
+    def __init__(self, resolution, sizes_file):
         self.resolution = int(resolution)
         self.tracks = {}
+        self.sizes = chrom_sizes(sizes_file)
 
     def __getitem__(self, track_name):
         return self.get_track(track_name)
@@ -127,9 +141,8 @@ class Genome:
 
     <chrom> must be formatted as 'chrN' where N is the chromosome number/symbol
     <start> will be rounded down to the nearest multiple of the genome resolution
-    <end> will be rounded up
-    if <start> and <end> are equal or end is not specified, <end> is set to
-    <start> + self.resolution
+    <end> will be rounded up if <start> and <end> are equal or end is not specified,
+        <end> is set to <start> + self.resolution
 
     Outputs a dict where each key is the track name and values are the data
     returned by each track.
@@ -166,10 +179,56 @@ class Genome:
 
         return self.tracks[track_name]
 
-    """Saves genome into a pickle-able file format"""
+    """Saves genome into a pickle file format"""
     def save(self, fname):
-        self.save_path = fname
-        pickle.dump(self, open(fname,'wb'))
 
-    def write(self):
-        pickle.dump(self, open(self.save_path,'wb'))
+        pickle.dump(self, open(fname,'wb'))
+        
+        """f = h5py.File(fname,'w')
+        f['resolution'] = self.resolution
+        recursively_save_dict_contents_to_group(f,'',self.tracks)
+
+        f.close()"""
+
+    """Saves genome from a hdf5 file format"""
+    def load(self, fname):
+
+        G = pickle.load(open(fname,'rb'))
+        self.tracks = G.tracks
+
+        """f = h5py.File(fname)
+        self.resolution = f['resolution'][()]
+        self.tracks = recursively_load_dict_contents_from_group(f,'/',self)"""
+
+def recursively_save_dict_contents_to_group(h5file, path, dic):
+    """
+    ....
+    """
+    for key, item in dic.items():
+        if isinstance(item, (np.ndarray, np.int64, np.float64, str, bytes)):
+            h5file[path + key] = item
+        elif isinstance(item, Sequential):
+            recursively_save_dict_contents_to_group(h5file, path + key + '/', item.tracks)
+        elif isinstance(item, Track):
+            recursively_save_dict_contents_to_group(h5file, path + key + '/', item.chrom_data)
+        else:
+            raise ValueError('Cannot save %s type'%type(item))
+
+def recursively_load_dict_contents_from_group(h5file, path, genome):
+    """
+    ....
+    """
+    ans = {}
+    for key, item in h5file[path].items():
+        if isinstance(item, h5py._hl.dataset.Dataset):
+            print(item)
+            track_name = path.split('/')[-2]
+            track = Track(track_name, genome.resolution, genome.sizes)
+            ans[key] = item[()]
+        elif isinstance(item, h5py._hl.group.Group):
+            if 'value' not in dir(item):
+                ans[key] = Sequential(key)
+            
+            ans[key].tracks = recursively_load_dict_contents_from_group(h5file, path + key + '/', genome)
+
+    return ans

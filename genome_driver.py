@@ -49,4 +49,4 @@ for track in tracks:
     g.add_track(track)
 
 g.save('genomes/genome_GM12878.mg')
-pprint.pprint(g.get('chr1',1e5,5e5,to_numpy=True,tracks=['Replication_Timing/G1','Replication_Timing/S2','Replication_Timing/G2']))
+pprint.pprint(g.get('chr2',1e5,5e5,to_numpy=True,tracks=['Replication_Timing/G1','Replication_Timing/S2','Replication_Timing/G2']))
